@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>物料关联分析</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;overflow:auto}
+#body-wrap{display:flex;flex-direction:column;min-height:100vh}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f7fa;color:#222;font-size:14px}
+/* ─── 顶部栏 ─── */
+#topbar{background:#2c3e50;color:#fff;padding:12px 16px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:10px;flex-shrink:0}
+#topbar span{font-size:18px}
+/* ─── 加载指示 ─── */
+#loadIndicator{padding:6px 16px;background:#f0f2f5;border-bottom:1px solid #e8ecf0;font-size:12px;color:#666;display:flex;align-items:center;gap:8px;flex-shrink:0}
+#loadIndicator.hidden{display:none}
+#loadDot{width:8px;height:8px;border-radius:50%;background:#3498db;flex-shrink:0}
+#loadDot.loading{animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+/* ─── 筛选区 ─── */
+#filters{padding:10px 16px;background:#fff;border-bottom:1px solid #e8ecf0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex-shrink:0}
+#searchInput{padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;width:100%;flex:1 1 200px}
+#brandFilter,#cat2Filter,#cat3Filter{padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;flex:1 1 120px;min-width:0}
+button{padding:8px 14px;background:#3498db;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:13px;flex-shrink:0}
+button:hover{background:#2980b9}
+/* ─── 统计标签 ─── */
+#statTags{display:flex;flex-wrap:wrap;gap:6px;padding:6px 16px;background:#fff;border-bottom:1px solid #e8ecf0;flex-shrink:0}
+.stat-tag{background:#ecf0f1;color:#555;font-size:12px;padding:3px 10px;border-radius:20px;white-space:nowrap}
+/* ─── 推荐产品区域 ─── */
+#recommendSection{padding:14px 16px;background:#fafbfc;border-bottom:1px solid #e8ecf0;flex-shrink:0}
+#recommendSection.hidden{display:none}
+#recommendSection .rec-title{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:14px;font-weight:600;color:#2c3e50}
+#recommendSection .rec-title .rec-dot{width:4px;height:16px;background:#e74c3c;border-radius:2px}
+.rec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.rec-card{border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);cursor:pointer;transition:transform .15s,box-shadow .15s;border:1px solid #eee}
+.rec-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.14);border-color:#ccc}
+.rec-card-img{height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;text-align:center}
+.rec-card-img .slogan{font-size:13px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.25);line-height:1.4;letter-spacing:.3px}
+.rec-card-img .sub{font-size:10px;color:rgba(255,255,255,.85);margin-top:4px;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.rec-card-body{padding:8px 10px 9px}
+.rec-card-body .rec-name{font-size:12px;font-weight:500;color:#222;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-card-body .rec-meta{font-size:10px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-card-body .rec-price{font-size:11px;color:#e74c3c;font-weight:600;margin-top:2px}
+.rec-card-body .rec-brand{font-size:9px;color:#aaa;margin-top:1px}
+/* ─── 主区域 ─── */
+#main{display:flex;flex:1;min-height:0;overflow:hidden;height:0}
+/* ─── 左侧面板 ─── */
+#left{min-width:260px;max-width:340px;border-right:1px solid #e8ecf0;overflow-y:auto;background:#fff;padding:10px;flex-shrink:0}
+/* ─── 右侧面板 ─── */
+#right{flex:1;overflow-y:auto;background:#fafbfc;padding:12px;overflow-x:auto}
+/* ─── 移动端侧边栏切换 ─── */
+#mobileListToggle{display:none;position:fixed;bottom:20px;right:20px;z-index:200;width:52px;height:52px;border-radius:50%;background:#3498db;color:#fff;font-size:22px;box-shadow:0 4px 12px rgba(0,0,0,.25);align-items:center;justify-content:center;cursor:pointer;border:none;line-height:1}
+#mobileListToggle:active{background:#2980b9}
+/* 遮罩层 */
+#drawerMask{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:150}
+#drawerMask.open{display:block}
+/* 面板提示 ─── */
+.panel-hint{color:#999;font-size:13px;text-align:center;padding:40px 16px}
+/* ─── 产品列表项 ─── */
+.prod-item{padding:10px 12px;border-radius:6px;cursor:pointer;border:1px solid transparent;margin-bottom:6px;transition:background .15s}
+.prod-item:hover{background:#eaf4fb;border-color:#cce4f7}
+.prod-item.selected{background:#d5eaf8;border-color:#3498db}
+.prod-item .pname{font-weight:500;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-item .pmeta{font-size:12px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod-item .pcount{font-size:11px;color:#aaa;margin-top:2px}
+/* ─── 关联结果 ─── */
+#resultPanel{min-width:600px}
+#resultPanel h3{margin-bottom:8px;color:#2c3e50;font-size:16px}
+#resultPanel h3 small{font-weight:400;font-size:12px;color:#888;margin-left:8px}
+.result-stats{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.stat-pill{background:#e74c3c;color:#fff;font-size:12px;padding:3px 10px;border-radius:20px;white-space:nowrap;font-weight:500}
+.sort-bar{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:12px;color:#888}
+.sort-btn{padding:3px 12px;border:1px solid #ddd;border-radius:20px;cursor:pointer;font-size:12px;background:#fff;color:#555;transition:all .15s}
+.sort-btn:hover{border-color:#3498db;color:#3498db}
+.sort-btn.active{background:#3498db;color:#fff;border-color:#3498db;font-weight:500}
+.corr-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.corr-table th{background:#ecf0f1;padding:8px 10px;text-align:left;font-weight:600;border-bottom:2px solid #d0d8de;white-space:nowrap}
+.corr-table td{padding:7px 10px;border-bottom:1px solid #e8ecf0}
+.corr-table td:first-child{white-space:nowrap}
+.corr-table tr:hover td{background:#f5f7fa}
+.corr-table .rank{color:#888;width:28px;text-align:center}
+.corr-table .mat-cell{white-space:normal;min-width:0;word-break:break-all}
+.corr-table .num-cell{text-align:right;white-space:nowrap;width:10%;min-width:60px}
+.corr-table .cust-cell{white-space:normal;min-width:0;font-size:12px;vertical-align:top;padding-top:8px}
+.corr-table .cust-names{color:#555;line-height:1.6}
+.corr-table .sales-cell{white-space:nowrap;width:16%;min-width:130px;font-size:12px;vertical-align:top;padding-top:8px}
+.corr-table .sales-row{display:flex;justify-content:space-between;line-height:1.8}
+.corr-table .sales-label{color:#aaa}
+.corr-table .sales-val{color:#e67e22;font-weight:600}
+.code-row{color:#aaa;font-size:11px}
+.corr-bar-wrap{background:#e8ecf0;border-radius:3px;height:6px;width:80px;display:inline-block;vertical-align:middle}
+.corr-bar{background:#3498db;height:6px;border-radius:3px;min-width:2px}
+/* ─── 错误 ─── */
+.error-msg{background:#fdf2f2;border:1px solid #f5c6cb;border-radius:8px;padding:16px;color:#c0392b;text-align:center;margin:20px}
+.error-msg button{margin-top:10px;background:#e74c3c}
+.retry-btn{display:inline-block;margin-top:8px;padding:6px 16px;background:#3498db;color:#fff;border:none;border-radius:6px;cursor:pointer}
+/* ─── 移动端适配 ─── */
+@media (max-width:768px){
+  body{font-size:13px}
+  #topbar{padding:10px 14px}
+  #topbar span{font-size:16px}
+  #filters{padding:8px 12px;gap:6px}
+  #searchInput,#brandFilter,#cat2Filter,#cat3Filter{flex:1 1 45%;min-width:0;font-size:12px;padding:7px 8px}
+  button{padding:7px 12px;font-size:12px;flex:0 0 auto}
+  #filters{padding-bottom:8px}
+  /* 主区域：堆叠，左侧变抽屉 */
+  #main{min-height:0}
+  #left{
+    position:fixed;top:0;left:0;bottom:0;z-index:160;
+    width:75vw;max-width:320px;
+    transform:translateX(-110%);
+    transition:transform .28s ease;
+    box-shadow:4px 0 20px rgba(0,0,0,.15);
+    padding-top:56px;
+    flex-shrink:0;
+  }
+  #left.drawer-open{transform:translateX(0)}
+  #left .drawer-header{display:block;position:absolute;top:0;left:0;right:0;background:#2c3e50;color:#fff;padding:10px 14px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:space-between}
+  #left .drawer-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1}
+  #left .drawer-close:active{opacity:.7}
+  #right{flex:1;padding:10px;overflow-x:hidden}
+  /* 移动端切换按钮 */
+  #mobileListToggle{display:flex}
+  #statTags{padding:5px 12px}
+  #loadIndicator{font-size:11px;padding:5px 12px}
+  #resultPanel{min-width:0}
+  .corr-table{font-size:12px}
+  .table-scroll{-webkit-overflow-scrolling:touch}
+  .corr-table td,.corr-table th{padding:6px 8px}
+  .corr-table .mat-cell{font-size:13px}
+  #resultPanel h3{font-size:15px}
+  /* 推荐区域移动端 */
+  #recommendSection{padding:10px 12px}
+  .rec-grid{gap:8px}
+  .rec-card-img{height:76px}
+  .rec-card-img .slogan{font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<div id="body-wrap">
+<div id="topbar">📊 <span>UE/百赛 物料关联分析</span></div>
+
+<div id="loadIndicator">
+  <span id="loadDot"></span>
+  <span id="loadText">初始化中...</span>
+</div>
+
+<div id="filters">
+  <input id="searchInput" placeholder="🔍 搜索物料名称/编码/品牌..." />
+  <select id="brandFilter"><option value="all">全部品牌</option></select>
+  <select id="cat2Filter"><option value="all">全部二级分类</option></select>
+  <select id="cat3Filter"><option value="all">全部三级分类</option></select>
+  <button id="resetBtn">重置</button>
+</div>
+
+<div id="statTags"></div>
+
+<!-- 推荐产品区域 -->
+<div id="recommendSection">
+  <div class="rec-title">
+    <span class="rec-dot"></span>
+    本周热销推荐
+  </div>
+  <div class="rec-grid" id="recGrid">
+    <!-- JS渲染 -->
+  </div>
+</div>
+
+<div id="main">
+  <div id="left">
+    <div class="drawer-header" style="display:none">
+      <span>📋 物料列表</span>
+      <button class="drawer-close" id="drawerCloseBtn">✕</button>
+    </div>
+    <div id="productList"><div class="panel-hint">加载中...</div></div>
+  </div>
+  <div id="right">
+    <div id="resultPanel"><div class="panel-hint">👈 点击左侧物料查看关联购买分析</div></div>
+  </div>
+</div>
+
+<!-- 移动端侧边栏切换按钮 -->
+<button id="mobileListToggle" onclick="toggleDrawer()">☰</button>
+<!-- 遮罩 -->
+<div id="drawerMask" onclick="closeDrawer()"></div>
+
+<script>
+// ─── 推荐产品数据（静态展示）───
+var REC_PRODUCTS = [
+  {
+    name: 'DIFCO TC YEASTOLATE UF 10KG',
+    brand: 'ThermoFisher (BPG-AB)',
+    cat2: '细胞培养',
+    price: '¥6,700,092',
+    slogan: '海量细胞培养',
+    sub: '10KG大容量·优选进口原料'
+  },
+  {
+    name: 'Gibco 澳胎血清',
+    brand: 'Gibco',
+    cat2: '细胞培养',
+    price: '¥694,700',
+    slogan: '血清优选',
+    sub: '澳洲来源·高活性'
+  },
+  {
+    name: 'PCR联管（8联管、0.2ml）',
+    brand: 'Axygen',
+    cat2: 'PCR相关',
+    price: '¥507,048',
+    slogan: 'PCR好帮手',
+    sub: '透明无菌·即开即用'
+  },
+  {
+    name: '测序服务（国产测序）',
+    brand: '铂尚',
+    cat2: '核酸类',
+    price: '¥1,013,033',
+    slogan: '精准测序',
+    sub: '国产优价·快速交付'
+  },
+  {
+    name: 'POROS 50HS 10000ML',
+    brand: 'ThermoFisher (BPG)',
+    cat2: '蛋白纯化',
+    price: '¥1,800,000',
+    slogan: '蛋白纯化利器',
+    sub: '大批量纯化·高效分离'
+  },
+  {
+    name: '引物/探针合成（国产）',
+    brand: '菩桑',
+    cat2: '核酸类',
+    price: '¥523,305',
+    slogan: '定制合成',
+    sub: '高纯度·灵活定制'
+  },
+  {
+    name: 'Dynamis AGT 培养基',
+    brand: 'ThermoFisher (BPG)',
+    cat2: '细胞培养',
+    price: '¥1,053,000',
+    slogan: '细胞培养基',
+    sub: '无血清配方·批次稳定'
+  },
+  {
+    name: 'CTS Rotea 细胞分离系统',
+    brand: 'ThermoFisher (BID)',
+    cat2: '小仪器',
+    price: '¥565,000',
+    slogan: '智能细胞分离',
+    sub: '自动化操作·高效精准'
+  }
+];
+
+// 随机渐变色池（每个slogan配合不同色调）
+var GRADIENTS = [
+  'linear-gradient(135deg,#FF6B6B,#FF8E53)',  // 珊瑚橙
+  'linear-gradient(135deg,#4ECDC4,#45B7AF)',  // 青绿
+  'linear-gradient(135deg,#A8E6CF,#56AB91)',    // 薄荷绿
+  'linear-gradient(135deg,#FFD93D,#F4A261)',    // 明黄橙
+  'linear-gradient(135deg,#6C5CE7,#A29BFE)',    // 薰衣草紫
+  'linear-gradient(135deg,#FD79A8,#E84393)',    // 玫红
+  'linear-gradient(135deg,#00B894,#00CEC9)',    // 翠绿青
+  'linear-gradient(135deg,#E17055,#FDCB6E)'     // 暖橙黄
+];
+
+function renderRecommend() {
+  var grid = document.getElementById('recGrid');
+  if (!grid) return;
+  var html = [];
+  for (var i = 0; i < REC_PRODUCTS.length; i++) {
+    var p = REC_PRODUCTS[i];
+    var grad = GRADIENTS[i % GRADIENTS.length];
+    html.push('<div class="rec-card" onclick="recCardClick(' + i + ')">');
+    html.push('<div class="rec-card-img" style="background:' + grad + '">');
+    html.push('<div class="slogan">' + p.slogan + '</div>');
+    html.push('<div class="sub">' + p.sub + '</div>');
+    html.push('</div>');
+    html.push('<div class="rec-card-body">');
+    html.push('<div class="rec-name">' + p.name + '</div>');
+    html.push('<div class="rec-meta">' + p.brand + ' · ' + p.cat2 + '</div>');
+    html.push('<div class="rec-price">' + p.price + '</div>');
+    html.push('<div class="rec-brand">' + p.brand + '</div>');
+    html.push('</div>');
+    html.push('</div>');
+  }
+  grid.innerHTML = html.join('');
+}
+
+window.setSort = function(key) {
+  sortKey = key;
+  renderResult();
+};
+
+window.recCardClick = function(idx) {
+  var p = REC_PRODUCTS[idx];
+  // 搜索框填入产品名并触发筛选
+  var si = document.getElementById('searchInput');
+  if (si) {
+    si.value = p.name;
+    si.dispatchEvent(new Event('input', {bubbles: true}));
+  }
+  // 滚到左侧列表顶部
+  var left = document.getElementById('left');
+  if (left) left.scrollTop = 0;
+  // 移动端关闭抽屉
+  if (window.innerWidth <= 768) closeDrawer();
+};
+
+(function(){
+  'use strict';
+  // ─── State ───
+  var productList = [];
+  var correlationCache = {};
+  var custCountMap = {};
+  var selectedCode = '';
+  var brandFilter = 'all';
+  var cat2Filter = 'all';
+  var cat3Filter = 'all';
+  var searchQuery = '';
+  var drawerOpen = false;
+
+  // ─── Drawer controls ───
+  window.toggleDrawer = function() {
+    drawerOpen = !drawerOpen;
+    var left = document.getElementById('left');
+    var mask = document.getElementById('drawerMask');
+    var btn = document.getElementById('mobileListToggle');
+    if (drawerOpen) {
+      left.classList.add('drawer-open');
+      mask.classList.add('open');
+      btn.textContent = '✕';
+    } else {
+      left.classList.remove('drawer-open');
+      mask.classList.remove('open');
+      btn.textContent = '☰';
+    }
+  };
+  window.closeDrawer = function() {
+    if (drawerOpen) toggleDrawer();
+  };
+
+  // ─── Safe DOM helpers ───
+  function $id(id) { return document.getElementById(id); }
+  function safeText(id, text) {
+    var el = $id(id);
+    if (el) el.textContent = text;
+  }
+  function safeHTML(id, html) {
+    var el = $id(id);
+    if (el) el.innerHTML = html;
+  }
+  function addClass(el, cls) { if (el) el.classList.add(cls); }
+  function removeClass(el, cls) { if (el) el.classList.remove(cls); }
+
+  // ─── Console logger ───
+  function log(s) { console.log('[SalesExplorer] ' + s); }
+
+  // ─── Loading UI ───
+  function setLoad(text) {
+    safeText('loadText', text);
+    var dot = $id('loadDot');
+    if (dot) addClass(dot, 'loading');
+    log('LOAD: ' + text);
+  }
+  function hideLoad() {
+    var el = $id('loadIndicator');
+    if (el) addClass(el, 'hidden');
+    log('LOAD: hidden');
+  }
+  function showError(msg) {
+    log('ERROR: ' + msg);
+    safeHTML('productList',
+      '<div class="error-msg">❌ ' + msg + '<br><button class="retry-btn" onclick="location.reload()">重试</button></div>'
+    );
+    var li = $id('loadIndicator');
+    if (li) addClass(li, 'hidden');
+  }
+
+  // ─── Fetch JSON (gzip via CompressionStream) ───
+  function fetchJSON(url, timeoutMs) {
+    timeoutMs = timeoutMs || 90000;
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, timeoutMs);
+    return fetch(url, { signal: controller.signal })
+      .then(function(r) {
+        clearTimeout(timer);
+        if (!r.ok) throw new Error(url + ' ' + r.status);
+        var len = r.headers.get('content-length') || '?';
+        log('Fetched: ' + url + ' (' + len + ' bytes)');
+        var isGz = url.endsWith('.gz');
+        if (isGz && r.body && window.DecompressionStream) {
+          var ds = new DecompressionStream('gzip');
+          r.body.pipeThrough(ds);
+          return new Response(ds.readable).json();
+        }
+        return r.json();
+      })
+      .catch(function(e) {
+        clearTimeout(timer);
+        log('Fetch failed: ' + url + ' => ' + e.message);
+        throw e;
+      });
+  }
+
+  // ─── Main load ───
+  function loadData() {
+    setLoad('正在加载产品目录...');
+    fetchJSON('./product_list.json.gz')
+      .then(function(data) {
+        productList = data || [];
+        log('productList loaded: ' + productList.length);
+        setLoad('正在加载关联数据...');
+        return fetchJSON('./correlation.json.gz');
+      })
+      .then(function(data) {
+        correlationCache = data || {};
+        log('correlationCache loaded: ' + Object.keys(correlationCache).length);
+        setLoad('正在计算客户统计...');
+        custCountMap = {};
+        for (var i = 0; i < productList.length; i++) {
+          var p = productList[i];
+          if (p.code) custCountMap[p.code] = p.custCount || 0;
+        }
+        hideLoad();
+        buildFilters();
+        applyFilters();
+      })
+      .catch(function(e) {
+        log('Load error: ' + e.message);
+        productList = [];
+        correlationCache = {};
+        hideLoad();
+        buildFilters();
+        applyFilters();
+      });
+  }
+
+  // ─── Build filter options ───
+  function buildBrandOptions() {
+    var seen = {};
+    var brands = ['all'];
+    for (var i = 0; i < productList.length; i++) {
+      var b = productList[i].brand;
+      if (b && !seen[b]) { seen[b] = true; brands.push(b); }
+    }
+    brands.sort();
+    $id('brandFilter').innerHTML = brands.map(function(b) {
+      return '<option value="' + b + '">' + (b === 'all' ? '全部品牌' : b) + '</option>';
+    }).join('');
+  }
+
+  function buildCat2Options(brand) {
+    var seen = {};
+    var cats = ['all'];
+    for (var i = 0; i < productList.length; i++) {
+      var p = productList[i];
+      if (brand !== 'all' && p.brand !== brand) continue;
+      var c = p.cat2;
+      if (c && !seen[c]) { seen[c] = true; cats.push(c); }
+    }
+    cats.sort();
+    $id('cat2Filter').innerHTML = cats.map(function(c) {
+      return '<option value="' + c + '">' + (c === 'all' ? '全部二级分类' : c) + '</option>';
+    }).join('');
+    cat2Filter = 'all';
+    buildCat3Options('all');
+  }
+
+  function buildCat3Options(cat2) {
+    var seen = {};
+    var cats = ['all'];
+    var brand = $id('brandFilter').value;
+    for (var i = 0; i < productList.length; i++) {
+      var p = productList[i];
+      if (brand !== 'all' && p.brand !== brand) continue;
+      if (cat2 !== 'all' && p.cat2 !== cat2) continue;
+      var c = p.cat3;
+      if (c && !seen[c]) { seen[c] = true; cats.push(c); }
+    }
+    cats.sort();
+    $id('cat3Filter').innerHTML = cats.map(function(c) {
+      return '<option value="' + c + '">' + (c === 'all' ? '全部三级分类' : c) + '</option>';
+    }).join('');
+    cat3Filter = 'all';
+  }
+
+  function buildFilters() {
+    buildBrandOptions();
+    buildCat2Options('all');
+    safeHTML('statTags',
+      '<span class="stat-tag">' + productList.length + ' 个物料</span>' +
+      '<span class="stat-tag">' + Object.keys(correlationCache).length + ' 有关联数据</span>'
+    );
+  }
+
+  function applyFilters() {
+    brandFilter = $id('brandFilter').value;
+    cat2Filter = $id('cat2Filter').value;
+    cat3Filter = $id('cat3Filter').value;
+    searchQuery = $id('searchInput').value.trim().toLowerCase();
+    renderList();
+    // 有筛选条件或已选产品时隐藏推荐区
+    var hasFilter = brandFilter !== 'all' || cat2Filter !== 'all' || cat3Filter !== 'all' || searchQuery || selectedCode;
+    toggleRecommend(!hasFilter);
+  }
+
+  function resetFilters() {
+    $id('brandFilter').value = 'all';
+    $id('cat2Filter').value = 'all';
+    $id('cat3Filter').value = 'all';
+    $id('searchInput').value = '';
+    selectedCode = '';
+    applyFilters();
+    toggleRecommend(true); // 重置后显示推荐区
+  }
+
+  // ─── Render list ───
+  function renderList() {
+    var el = $id('productList');
+    if (!el) return;
+    var filtered = productList.filter(function(p) {
+      if (brandFilter !== 'all' && p.brand !== brandFilter) return false;
+      if (cat2Filter !== 'all' && p.cat2 !== cat2Filter) return false;
+      if (cat3Filter !== 'all' && p.cat3 !== cat3Filter) return false;
+      if (searchQuery) {
+        var q = searchQuery;
+        if (!(p.code||'').toLowerCase().includes(q) &&
+            !(p.name||'').toLowerCase().includes(q) &&
+            !(p.brand||'').toLowerCase().includes(q) &&
+            !(p.cat2||'').toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+    filtered.sort(function(a, b) { return (b.salesTotal||0) - (a.salesTotal||0); });
+    if (filtered.length === 0) {
+      el.innerHTML = '<div class="panel-hint">没有匹配结果</div>';
+      return;
+    }
+    var html = [];
+    for (var i = 0; i < filtered.length; i++) {
+      var p = filtered[i];
+      var sel = p.code === selectedCode ? ' selected' : '';
+      var st = p.salesTotal || 0;
+      var sc = p.salesCount || 0;
+      var salesStr = st > 0 ? '¥' + (st >= 10000 ? (st/10000).toFixed(1) + '万' : st.toFixed(0)) : '';
+      var countStr = sc > 0 ? sc + '件' : '';
+      html.push('<div class="prod-item' + sel + '" onclick="selectProduct(\'' + (p.code||'').replace(/'/g,"\\'") + '\')">');
+      html.push('<div class="pname">' + (p.name||'—') + (salesStr ? ' <span style="color:#e67e22;font-size:12px">【' + salesStr + '】</span>' : '') + (countStr ? ' <span style="color:#888;font-size:12px"> ' + countStr + '</span>' : '') + '</div>');
+      html.push('<div class="pmeta">' + (p.brand||'') + ' · ' + (p.cat2||'') + (p.cat3 ? ' · ' + p.cat3 : '') + '</div>');
+      html.push('</div>');
+    }
+    el.innerHTML = html.join('');
+    log('Rendered ' + filtered.length + ' products');
+  }
+
+  // ─── 推荐区显示/隐藏 ───
+  function toggleRecommend(show) {
+    var el = document.getElementById('recommendSection');
+    if (el) {
+      if (show) el.classList.remove('hidden');
+      else el.classList.add('hidden');
+    }
+  }
+
+  // ─── Select product ───
+  window.selectProduct = function(code) {
+    selectedCode = code;
+    toggleRecommend(false); // 选产品后隐藏推荐区
+    renderList();
+    renderResult();
+    // On mobile: close drawer after selection
+    if (window.innerWidth <= 768) closeDrawer();
+  };
+
+  var sortKey = 'coverage'; // 'coverage' or 'prob'
+
+  // ─── Render result ───
+  function renderResult() {
+    var el = $id('resultPanel');
+    if (!el) return;
+    if (!selectedCode) {
+      el.innerHTML = '<div class="panel-hint">👈 点击左侧物料查看关联购买分析</div>';
+      return;
+    }
+    var corr = correlationCache[selectedCode];
+    var info = null;
+    for (var i = 0; i < productList.length; i++) {
+      if (productList[i].code === selectedCode) { info = productList[i]; break; }
+    }
+    if (!corr || corr.length === 0) {
+      el.innerHTML = '<div class="panel-hint">暂无关联数据</div>';
+      return;
+    }
+    // Sort by selected key
+    var sortedCorr = corr.slice().sort(function(a, b) {
+      return (b[sortKey] || 0) - (a[sortKey] || 0);
+    });
+    var maxProb = sortedCorr[0] ? sortedCorr[0].prob : 100;
+    var salesTotalStr = info ? (info.salesTotal >= 10000 ? '¥' + (info.salesTotal/10000).toFixed(1) + '万' : '¥' + info.salesTotal.toFixed(0)) : '—';
+    var custCountStr = info && info.custCount ? info.custCount + '位客户' : '';
+    var orderFreqStr = '';
+    if (info && info.orderFreq > 0 && info.orderCount > 0) {
+      var daysPerOrder = info.orderFreq > 0 ? Math.round(180 / info.orderFreq) : 0;
+      orderFreqStr = '每' + daysPerOrder + '天/单';
+    }
+    var statsHtml = '<div class="result-stats">';
+    if (salesTotalStr !== '—') statsHtml += '<span class="stat-pill">' + salesTotalStr + '</span>';
+    if (custCountStr) statsHtml += '<span class="stat-pill">' + custCountStr + '</span>';
+    if (orderFreqStr) statsHtml += '<span class="stat-pill">' + orderFreqStr + '</span>';
+    statsHtml += '</div>';
+    var sortBar = '';
+    var html = '<h3>' + (info ? info.name : selectedCode) + ' <small>TOP ' + corr.length + ' 关联购买</small></h3>' + statsHtml + sortBar;
+    html += '<div class="table-scroll"><table class="corr-table"><thead><tr><th>#</th><th>关联物料</th><th>概率</th><th>相关客户</th><th>销售额</th></tr></thead><tbody>';
+    for (var i = 0; i < sortedCorr.length; i++) {
+      var c = sortedCorr[i];
+      var coverage = c.coverage || 0;
+      var pInfo = null;
+      for (var j = 0; j < productList.length; j++) {
+        if (productList[j].code === c.code) { pInfo = productList[j]; break; }
+      }
+      var custCount = c.custCount || c.count || 0;
+      var custStr = c.custStr || '';
+      var custLabel = custStr ? custStr : '暂无';
+      if (custCount > 5) custLabel += ' <span style="color:#888">+' + (custCount - 5) + '</span>';
+      var salesTotal = c.salesTotal || 0;
+      var salesCount = c.salesCount || 0;
+      var avgPrice = salesCount > 0 ? (salesTotal / salesCount) : 0;
+      var avgPerCust = custCount > 0 ? (salesTotal / custCount) : 0;
+      var avgPriceStr = avgPrice >= 10000 ? '¥' + (avgPrice/10000).toFixed(2) + '万' : '¥' + avgPrice.toFixed(0);
+      var avgPerCustStr = avgPerCust >= 10000 ? '¥' + (avgPerCust/10000).toFixed(2) + '万' : (avgPerCust > 0 ? '¥' + avgPerCust.toFixed(0) : '—');
+      var salesTotalStr = salesTotal > 0 ? (salesTotal >= 10000 ? '¥' + (salesTotal/10000).toFixed(1) + '万' : '¥' + salesTotal.toFixed(0)) : '—';
+      var coverageColor = coverage >= 50 ? '#e74c3c' : coverage >= 20 ? '#e67e22' : '#27ae60';
+      html += '<tr>';
+      html += '<td class="rank">' + (i+1) + '</td>';
+      html += '<td class="mat-cell"><b>' + (pInfo ? pInfo.name : c.code) + '</b><br><small class="code-row">' + c.code + ' · ' + (pInfo ? (pInfo.brand||'') + ' · ' + (pInfo.cat2||'') : '') + '</small></td>';
+      html += '<td class="num-cell"><b style="color:' + coverageColor + '">' + coverage.toFixed(1) + '%</b><br><small style="color:#aaa">' + custCount + '位</small></td>';
+      html += '<td class="cust-cell"><span class="cust-names">' + custLabel + '</span></td>';
+      html += '<td class="sales-cell">';
+      html += '<div class="sales-row"><span class="sales-label">总价</span><span class="sales-val">' + salesTotalStr + '</span></div>';
+      html += '<div class="sales-row"><span class="sales-label">均价</span><span class="sales-val">' + avgPriceStr + '</span></div>';
+      html += '<div class="sales-row"><span class="sales-label">客均</span><span class="sales-val">' + avgPerCustStr + '</span></div>';
+      html += '</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+  }
+
+  // ─── Event listeners ───
+  $id('searchInput').addEventListener('input', applyFilters);
+  $id('brandFilter').addEventListener('change', function() {
+    buildCat2Options($id('brandFilter').value);
+    applyFilters();
+  });
+  $id('cat2Filter').addEventListener('change', function() {
+    buildCat3Options($id('cat2Filter').value);
+    applyFilters();
+  });
+  $id('cat3Filter').addEventListener('change', applyFilters);
+  $id('resetBtn').addEventListener('click', resetFilters);
+
+  // Mobile drawer close button
+  var drawerClose = $id('drawerCloseBtn');
+  if (drawerClose) drawerClose.addEventListener('click', closeDrawer);
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDrawer();
+  });
+
+  // ─── Mobile: restore loadDot class after DOM ready ───
+  var dot = $id('loadDot');
+  if (dot) addClass(dot, 'loading');
+
+  log('Script initialized, starting loadData...');
+  // 初始化推荐区（静态，无需等待数据）
+  renderRecommend();
+  loadData();
+})();
+</script>
+</div><!-- /body-wrap -->
+</body>
+</html>
