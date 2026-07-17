@@ -411,12 +411,12 @@ window.recCardClick = function(idx) {
   // ─── Main load ───
   function loadData() {
     setLoad('正在加载产品目录...');
-    fetchJSON('./product_list.json.gz')
+    fetchJSON('./product_list.json')
       .then(function(data) {
         productList = data || [];
         log('productList loaded: ' + productList.length);
         setLoad('正在加载关联数据...');
-        return fetchJSON('./correlation.json.gz');
+        return fetchJSON('./correlation.json');
       })
       .then(function(data) {
         correlationCache = data || {};
